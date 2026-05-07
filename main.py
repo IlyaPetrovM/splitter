@@ -51,18 +51,14 @@ def extract_audio_track(input_file: str, output_file: str) -> None:
     print(f"[INFO] Audio extracted to: {output_file}")
 
 
-def split_audio(input_file: str, output_dir: str, base_name: str,
+def split_audio(input_file: str, output_dir: str, original_filename: str,
                 segments: list[tuple[float, float]]) -> list[str]:
     """Split audio file at specified time ranges"""
     created_files = []
 
     for i, (start, end) in enumerate(segments):
-        duration = end - start
-        output_file = os.path.join(output_dir, f"{base_name}_{int(start)}__{int(end)}")
-
-        # Preserve original format
-        ext = Path(input_file).suffix
-        output_file += ext
+        ext = Path(original_filename).suffix
+        output_file = os.path.join(output_dir, f"{original_filename}__part__{int(start)}__{int(end)}{ext}")
 
         print(f"[SPLIT] Cutting segment {i+1}/{len(segments)}: {start}s-{end}s -> {output_file}")
 
@@ -153,9 +149,11 @@ async def split_endpoint(request: SplitRequest):
     print(f"[INFO] Total segments: {len(segments)}")
 
     # Split audio
-    base_name = Path(request.filename).stem
+    split_dir = os.path.join(SPLITTED_DIR, request.filename)
+    os.makedirs(split_dir, exist_ok=True)
+
     try:
-        created_files = split_audio(processing_file, SPLITTED_DIR, base_name, segments)
+        created_files = split_audio(processing_file, split_dir, request.filename, segments)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")
     finally:
