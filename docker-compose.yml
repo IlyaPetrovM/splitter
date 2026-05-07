@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  audio-splitter:
+    build: .
+    container_name: audio-splitter-service
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./shared_storage:/shared_storage
+    restart: unless-stopped
