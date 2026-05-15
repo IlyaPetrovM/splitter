@@ -1,20 +1,23 @@
 import os
 import subprocess
 import json
+import tempfile
+import requests
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 app = FastAPI()
 
-SHARED_STORAGE = "/shared_storage"
+SHARED_STORAGE = "/file_storage"
 SPLITTED_DIR = os.path.join(SHARED_STORAGE, "splitted")
 
 os.makedirs(SPLITTED_DIR, exist_ok=True)
 
 
 class SplitRequest(BaseModel):
-    filename: str
+    filename: str | None = None
+    url: str | None = None
     max_duration: int | None = None
     split_parts: int | None = None
 
@@ -49,6 +52,28 @@ def extract_audio_track(input_file: str, output_file: str) -> None:
     ]
     subprocess.run(cmd, capture_output=True, check=True)
     print(f"[INFO] Audio extracted to: {output_file}")
+
+
+def download_file(url: str, temp_dir: str) -> str:
+    """Download file from URL to temp directory"""
+    print(f"[INFO] Downloading file from: {url}")
+    try:
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+
+        # Extract filename from URL or use default
+        filename = url.split('/')[-1].split('?')[0] or "downloaded_file"
+        file_path = os.path.join(temp_dir, filename)
+
+        with open(file_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+        print(f"[INFO] File downloaded to: {file_path}")
+        return file_path
+    except Exception as e:
+        raise ValueError(f"Failed to download file: {str(e)}")
 
 
 def split_audio(input_file: str, output_dir: str, original_filename: str,
@@ -105,15 +130,37 @@ def calculate_segments(duration: float, max_duration: int | None,
 @app.post("/split")
 async def split_endpoint(request: SplitRequest):
     """Split audio file by duration or parts count"""
-    print(f"\n[REQUEST] filename={request.filename}, max_duration={request.max_duration}, split_parts={request.split_parts}")
+    print(f"\n[REQUEST] filename={request.filename}, url={request.url}, max_duration={request.max_duration}, split_parts={request.split_parts}")
 
     if not request.max_duration and not request.split_parts:
         raise HTTPException(status_code=400, detail="Provide max_duration or split_parts")
 
-    # Find file
-    file_path = os.path.join(SHARED_STORAGE, request.filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    if not request.filename and not request.url:
+        raise HTTPException(status_code=400, detail="Provide either filename or url")
+
+    if request.filename and request.url:
+        raise HTTPException(status_code=400, detail="Provide either filename or url, not both")
+
+    # Handle URL download
+    temp_dir_obj = None
+    downloaded_file = None
+    original_filename = request.filename
+
+    if request.url:
+        temp_dir_obj = tempfile.TemporaryDirectory()
+        temp_dir = temp_dir_obj.name
+        try:
+            downloaded_file = download_file(request.url, temp_dir)
+            file_path = downloaded_file
+            original_filename = Path(downloaded_file).name
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Download failed: {str(e)}")
+    else:
+        # Find file from storage
+        file_path = os.path.join(SHARED_STORAGE, request.filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        original_filename = request.filename
 
     print(f"[INFO] File found: {file_path}")
 
@@ -125,44 +172,50 @@ async def split_endpoint(request: SplitRequest):
     processing_file = file_path
     temp_audio = None
 
-    if file_ext in video_extensions:
-        temp_audio = os.path.join(SPLITTED_DIR, f"_temp_audio_{request.filename}.mp3")
-        extract_audio_track(file_path, temp_audio)
-        processing_file = temp_audio
-
-    elif file_ext not in audio_extensions:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {file_ext}")
-
-    # Get duration
     try:
-        duration = get_audio_duration(processing_file)
-        print(f"[INFO] Duration: {duration:.2f}s")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get duration: {str(e)}")
+        if file_ext in video_extensions:
+            temp_audio = os.path.join(SPLITTED_DIR, f"_temp_audio_{original_filename}.mp3")
+            extract_audio_track(file_path, temp_audio)
+            processing_file = temp_audio
 
-    # Calculate segments
-    segments = calculate_segments(duration, request.max_duration, request.split_parts)
+        elif file_ext not in audio_extensions:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {file_ext}")
 
-    if not segments:
-        raise HTTPException(status_code=400, detail="No segments calculated")
+        # Get duration
+        try:
+            duration = get_audio_duration(processing_file)
+            print(f"[INFO] Duration: {duration:.2f}s")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to get duration: {str(e)}")
 
-    print(f"[INFO] Total segments: {len(segments)}")
+        # Calculate segments
+        segments = calculate_segments(duration, request.max_duration, request.split_parts)
 
-    # Split audio
-    split_dir = os.path.join(SPLITTED_DIR, request.filename)
-    os.makedirs(split_dir, exist_ok=True)
+        if not segments:
+            raise HTTPException(status_code=400, detail="No segments calculated")
 
-    try:
-        created_files = split_audio(processing_file, split_dir, request.filename, segments)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")
+        print(f"[INFO] Total segments: {len(segments)}")
+
+        # Split audio
+        split_dir = os.path.join(SPLITTED_DIR, original_filename)
+        os.makedirs(split_dir, exist_ok=True)
+
+        try:
+            created_files = split_audio(processing_file, split_dir, original_filename, segments)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")
+
+        print(f"[DONE] Processing completed\n")
+        return {"files": created_files}
+
     finally:
         if temp_audio and os.path.exists(temp_audio):
             os.remove(temp_audio)
             print(f"[INFO] Temp audio removed")
 
-    print(f"[DONE] Processing completed\n")
-    return {"files": created_files}
+        if temp_dir_obj:
+            temp_dir_obj.cleanup()
+            print(f"[INFO] Temp directory removed")
 
 
 @app.get("/health")
