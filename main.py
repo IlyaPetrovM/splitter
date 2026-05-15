@@ -5,6 +5,7 @@ import tempfile
 import requests
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -206,7 +207,8 @@ async def split_endpoint(request: SplitRequest):
             raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")
 
         print(f"[DONE] Processing completed\n")
-        return {"files": created_files}
+        download_urls = [f"/download{file_path.replace(os.sep, '/')}" for file_path in created_files]
+        return {"files": created_files, "download_urls": download_urls}
 
     finally:
         if temp_audio and os.path.exists(temp_audio):
@@ -216,6 +218,30 @@ async def split_endpoint(request: SplitRequest):
         if temp_dir_obj:
             temp_dir_obj.cleanup()
             print(f"[INFO] Temp directory removed")
+
+
+@app.get("/download/{file_path:path}")
+async def download_file_endpoint(file_path: str):
+    """Download a split audio file"""
+    full_path = "/" + file_path
+
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {full_path}")
+
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=400, detail="Path is not a file")
+
+    if not full_path.startswith(SPLITTED_DIR):
+        raise HTTPException(status_code=403, detail="Access denied: file is outside splitted directory")
+
+    filename = os.path.basename(full_path)
+    print(f"[DOWNLOAD] Sending file: {full_path}")
+
+    return FileResponse(
+        path=full_path,
+        media_type="audio/mpeg",
+        filename=filename
+    )
 
 
 @app.get("/health")

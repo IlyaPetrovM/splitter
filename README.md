@@ -45,8 +45,26 @@ curl -X POST http://localhost:8081/split \
   "files": [
     "/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
     "/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
+  ],
+  "download_urls": [
+    "/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
+    "/download/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
   ]
 }
+```
+
+### GET /download/{file_path}
+
+Скачать обработанный аудиофайл:
+
+```bash
+curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3
+```
+
+или используя URL из ответа `/split`:
+
+```bash
+curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3 -o audio_part_1.mp3
 ```
 
 ### GET /health
