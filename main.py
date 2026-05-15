@@ -12,6 +12,7 @@ app = FastAPI()
 
 SHARED_STORAGE = "/file_storage"
 SPLITTED_DIR = os.path.join(SHARED_STORAGE, "splitted")
+FILE_STORAGE_API = "http://file-storage:3001/api/files"
 
 os.makedirs(SPLITTED_DIR, exist_ok=True)
 
@@ -21,6 +22,7 @@ class SplitRequest(BaseModel):
     url: str | None = None
     max_duration: int | None = None
     split_parts: int | None = None
+    save_to_storage: bool = False
 
 
 def get_audio_duration(file_path: str) -> float:
@@ -75,6 +77,23 @@ def download_file(url: str, temp_dir: str) -> str:
         return file_path
     except Exception as e:
         raise ValueError(f"Failed to download file: {str(e)}")
+
+
+def upload_file_to_storage(file_path: str) -> dict:
+    """Upload file to File Storage Service"""
+    print(f"[INFO] Uploading file to storage: {file_path}")
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'file': (os.path.basename(file_path), f)}
+            response = requests.post(FILE_STORAGE_API, files=files, timeout=30)
+            response.raise_for_status()
+
+        result = response.json()
+        file_id = result.get('file', {}).get('id')
+        print(f"[INFO] File uploaded to storage with id: {file_id}")
+        return result.get('file', {})
+    except Exception as e:
+        raise ValueError(f"Failed to upload file to storage: {str(e)}")
 
 
 def split_audio(input_file: str, output_dir: str, original_filename: str,
@@ -144,6 +163,7 @@ async def split_endpoint(request: SplitRequest):
 
     # Handle URL download
     temp_dir_obj = None
+    temp_split_dir_obj = None
     downloaded_file = None
     original_filename = request.filename
 
@@ -197,18 +217,48 @@ async def split_endpoint(request: SplitRequest):
 
         print(f"[INFO] Total segments: {len(segments)}")
 
-        # Split audio
-        split_dir = os.path.join(SPLITTED_DIR, original_filename)
-        os.makedirs(split_dir, exist_ok=True)
+        # Determine output directory
+        temp_split_dir_obj = None
+        if request.save_to_storage:
+            # Use temporary directory for results
+            temp_split_dir_obj = tempfile.TemporaryDirectory(prefix="splitted_")
+            split_dir = temp_split_dir_obj.name
+            print(f"[INFO] Using temporary directory for split files: {split_dir}")
+        else:
+            # Use persistent storage
+            split_dir = os.path.join(SPLITTED_DIR, original_filename)
+            os.makedirs(split_dir, exist_ok=True)
 
         try:
             created_files = split_audio(processing_file, split_dir, original_filename, segments)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")
 
+        # Upload to storage if requested
+        storage_files = []
+        if request.save_to_storage:
+            print(f"[INFO] Uploading {len(created_files)} files to storage...")
+            for file_path in created_files:
+                try:
+                    file_info = upload_file_to_storage(file_path)
+                    storage_files.append(file_info)
+                except Exception as e:
+                    print(f"[WARNING] Failed to upload {file_path}: {str(e)}")
+                    raise HTTPException(status_code=500, detail=f"Upload to storage failed: {str(e)}")
+
         print(f"[DONE] Processing completed\n")
-        download_urls = [f"/download{file_path.replace(os.sep, '/')}" for file_path in created_files]
-        return {"files": created_files, "download_urls": download_urls}
+
+        # Prepare response
+        if request.save_to_storage:
+            # Return only storage file information
+            return {"storage_files": storage_files}
+        else:
+            # Return local file information
+            download_urls = [f"/download{file_path.replace(os.sep, '/')}" for file_path in created_files]
+            return {
+                "files": created_files,
+                "download_urls": download_urls
+            }
 
     finally:
         if temp_audio and os.path.exists(temp_audio):
@@ -217,7 +267,11 @@ async def split_endpoint(request: SplitRequest):
 
         if temp_dir_obj:
             temp_dir_obj.cleanup()
-            print(f"[INFO] Temp directory removed")
+            print(f"[INFO] Input temp directory removed")
+
+        if temp_split_dir_obj:
+            temp_split_dir_obj.cleanup()
+            print(f"[INFO] Split temp directory removed")
 
 
 @app.get("/download/{file_path:path}")

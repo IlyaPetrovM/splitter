@@ -13,6 +13,15 @@ FastAPI микросервис для нарезания аудио файлов
 
 Нарезать аудио файл по длительности или количеству частей.
 
+**Параметры запроса:**
+- `filename` (string, опционально) - название файла в хранилище
+- `url` (string, опционально) - URL для скачивания файла
+- `max_duration` (integer, опционально) - максимальная длительность каждого файла в секундах
+- `split_parts` (integer, опционально) - количество частей для разделения
+- `save_to_storage` (boolean, по умолчанию false) - загрузить результирующие файлы в File Storage Service
+
+**Примечание:** Должны быть указаны либо `filename`, либо `url` (но не оба одновременно). Должны быть указаны либо `max_duration`, либо `split_parts` (но не оба одновременно).
+
 #### По файлу из хранилища
 
 **По максимальной длительности:**
@@ -39,7 +48,28 @@ curl -X POST http://localhost:8081/split \
   -d '{"url": "https://example.com/audio.mp3", "split_parts": 4}'
 ```
 
-**Response:**
+#### Сохранение результатов в хранилище
+
+Добавьте параметр `save_to_storage: true` чтобы загрузить результирующие файлы в File Storage Service. При этом:
+- Файлы сохраняются во временную папку
+- Загружаются в File Storage Service
+- Удаляются из временной папки после успешной загрузки
+
+```bash
+curl -X POST http://localhost:8081/split \
+  -H "Content-Type: application/json" \
+  -d '{"filename": "audio.mp3", "split_parts": 4, "save_to_storage": true}'
+```
+
+или с URL:
+
+```bash
+curl -X POST http://localhost:8081/split \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/audio.mp3", "split_parts": 4, "save_to_storage": true}'
+```
+
+**Response без save_to_storage (файлы в локальном хранилище):**
 ```json
 {
   "files": [
@@ -49,6 +79,22 @@ curl -X POST http://localhost:8081/split \
   "download_urls": [
     "/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
     "/download/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
+  ]
+}
+```
+
+**Response с save_to_storage=true (файлы в File Storage Service):**
+```json
+{
+  "storage_files": [
+    {
+      "id": "1777218058633-57656008-audio.mp3__part__0__30.mp3",
+      "originalName": "audio.mp3__part__0__30.mp3",
+      "size": 1024000,
+      "mimeType": "audio/mpeg",
+      "path": "/app/storage/1777218058633-57656008-audio.mp3__part__0__30.mp3",
+      "uploadedAt": "2026-05-15T10:30:00.000Z"
+    }
   ]
 }
 ```
