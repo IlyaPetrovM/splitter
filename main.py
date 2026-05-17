@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-SHARED_STORAGE = "/file_storage"
+SHARED_STORAGE = "/shared_storage"
 SPLITTED_DIR = os.path.join(SHARED_STORAGE, "splitted")
 FILE_STORAGE_API = "http://file-storage:3001/api/files"
 
@@ -254,7 +254,7 @@ async def split_endpoint(request: SplitRequest):
             return {"storage_files": storage_files}
         else:
             # Return local file information
-            download_urls = [f"/download{file_path.replace(os.sep, '/')}" for file_path in created_files]
+            download_urls = [f"/download/{file_path.lstrip('/').replace(os.sep, '/')}" for file_path in created_files]
             return {
                 "files": created_files,
                 "download_urls": download_urls

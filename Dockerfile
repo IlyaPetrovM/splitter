@@ -1,9 +1,9 @@
-FROM python:3.11-slim
+# Берем бинарник из проверенного образа
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    nfs-common \
-    && rm -rf /var/lib/apt/lists/*
+# Далее используйте ваш основной образ (python, node, alpine и т.д.)
+FROM python:3.11-alpine
+COPY --from=mwader/static-ffmpeg:latest-amd64 /ffmpeg /usr/local/bin/
+COPY --from=mwader/static-ffmpeg:latest-amd64 /ffprobe /usr/local/bin/
 
 WORKDIR /app
 
@@ -11,11 +11,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
 
 VOLUME ["/shared_storage"]
 
 EXPOSE 8081
 
-ENTRYPOINT ["./entrypoint.sh"]
+# Запуск приложения
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8081"]

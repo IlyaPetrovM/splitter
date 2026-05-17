@@ -110,7 +110,7 @@ curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.m
 или используя URL из ответа `/split`:
 
 ```bash
-curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3 -o audio_part_1.mp3
+curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3 -o audio.mp3__part__0__30.mp3
 ```
 
 ### GET /health
