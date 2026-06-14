@@ -1,13 +1,49 @@
-version: '3.8'
-
 services:
   audio-splitter:
     build: .
     image: audio-splitter-service:0.0.1
     container_name: audio-splitter
-    ports:
-      - "8002:8002"
     volumes:
-      - ./shared_storage:/shared_storage
+      - ./storage/splitter:/shared_storage
     privileged: true
     restart: unless-stopped
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    networks:
+      - splitter-network
+
+  rabbitmq:
+    image: rabbitmq:4.0-management-alpine
+    container_name: rabbitmq-service
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./storage/rabbitmq:/var/lib/rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    restart: unless-stopped
+    networks:
+      - splitter-network
+  file-storage-service:
+    image: file-storage-service:0.0.1
+    container_name: file-storage-for-splitter
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./storage/file_service:/app/storage
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - STORAGE_PATH=/app/storage
+      - MAX_FILE_SIZE=52428800
+    restart: unless-stopped
+    networks:
+      - splitter-network
+
+networks:
+  splitter-network:
+    driver: bridge

@@ -1,19 +1,29 @@
 # Audio Splitter Service
 
-FastAPI микросервис для нарезания аудио файлов на части без переперекодирования.
+Микросервис для нарезания аудио файлов на части без переперекодирования. Работает на основе RabbitMQ очередей.
 
 ## Поддерживаемые форматы
 
 - Аудио: mp3, wav, m4a, flac, ogg
 - Видео (извлечение аудиодорожки): mp4, mkv, webm
 
-## API
+## RabbitMQ Interface
 
-### POST /split
+Сервис слушает очередь `split_in` для получения команд и отправляет результаты в очередь `split_out`.
 
-Нарезать аудио файл по длительности или количеству частей.
+### Формат входящего сообщения (split_in)
 
-**Параметры запроса:**
+```json
+{
+  "filename": "audio.mp3",
+  "url": null,
+  "max_duration": 60,
+  "split_parts": null,
+  "save_to_storage": false
+}
+```
+
+**Параметры:**
 - `filename` (string, опционально) - название файла в хранилище
 - `url` (string, опционально) - URL для скачивания файла
 - `max_duration` (integer, опционально) - максимальная длительность каждого файла в секундах
@@ -22,62 +32,61 @@ FastAPI микросервис для нарезания аудио файлов
 
 **Примечание:** Должны быть указаны либо `filename`, либо `url` (но не оба одновременно). Должны быть указаны либо `max_duration`, либо `split_parts` (но не оба одновременно).
 
-#### По файлу из хранилища
+### Примеры входящих сообщений
 
-**По максимальной длительности:**
-```bash
-curl -X POST http://localhost:8081/split \
-  -H "Content-Type: application/json" \
-  -d '{"filename": "audio.mp3", "max_duration": 60}'
-```
+#### По файлу из хранилища с max_duration
 
-**По количеству частей:**
-```bash
-curl -X POST http://localhost:8081/split \
-  -H "Content-Type: application/json" \
-  -d '{"filename": "video.mp4", "split_parts": 4}'
-```
-
-#### По URL (скачивание во временную папку)
-
-Файл будет автоматически скачан во временную папку, обработан и удален после завершения.
-
-```bash
-curl -X POST http://localhost:8081/split \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/audio.mp3", "split_parts": 4}'
-```
-
-#### Сохранение результатов в хранилище
-
-Добавьте параметр `save_to_storage: true` чтобы загрузить результирующие файлы в File Storage Service. При этом:
-- Файлы сохраняются во временную папку
-- Загружаются в File Storage Service
-- Удаляются из временной папки после успешной загрузки
-
-```bash
-curl -X POST http://localhost:8081/split \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/audio.mp3", "split_parts": 4, "save_to_storage": true}'
-```
-
-**Response без save_to_storage (файлы в локальном хранилище):**
 ```json
 {
+  "filename": "audio.mp3",
+  "max_duration": 60,
+  "save_to_storage": false
+}
+```
+
+#### с количеством частей
+
+```json
+{
+  "task_id": "task_uuid",
+  "url": "http://file-storage-service:3001/api/files/audio.mp3",
+  "split_parts": 4,
+  "save_to_storage": false
+}
+```
+
+#### По URL с сохранением в хранилище
+
+```json
+{
+  "task_id": "task_uuid",
+  "url": "http://file-storage-service:3001/api/files/audio.mp3",
+  "split_parts": 4,
+  "save_to_storage": true
+}
+```
+
+### Формат исходящего сообщения (split_out)
+
+#### При успехе (save_to_storage=false)
+
+```json
+{
+  "task_id": "task_uuid",
+  "success": true,
   "files": [
     "/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
     "/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
-  ],
-  "download_urls": [
-    "/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
-    "/download/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
   ]
 }
 ```
 
-**Response с save_to_storage=true (файлы в File Storage Service):**
+#### При успехе (save_to_storage=true)
+
 ```json
 {
+  "task_id": "task_uuid",
+  "success": true,
   "storage_files": [
     {
       "id": "1777218058633-57656008-audio.mp3__part__0__30.mp3",
@@ -91,25 +100,14 @@ curl -X POST http://localhost:8081/split \
 }
 ```
 
-### GET /download/{file_path}
+#### При ошибке
 
-Скачать обработанный аудиофайл:
-
-```bash
-curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3
-```
-
-или используя URL из ответа `/split`:
-
-```bash
-curl -O http://localhost:8081/download/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3 -o audio.mp3__part__0__30.mp3
-```
-
-### GET /health
-
-Проверка статуса сервиса:
-```bash
-curl http://localhost:8081/health
+```json
+{
+  "task_id": "task_uuid",
+  "success": false,
+  "error": "Error message describing what went wrong"
+}
 ```
 
 ## Использование
@@ -120,6 +118,10 @@ curl http://localhost:8081/health
 docker-compose up -d
 ```
 
+Это запустит оба сервиса:
+- audio-splitter (подключается к RabbitMQ)
+- rabbitmq на портах 5672 (AMQP) и 15672 (Management UI)
+
 ### Docker
 
 Собрать образ:
@@ -129,10 +131,17 @@ docker build -t audio-splitter .
 
 Запустить контейнер:
 ```bash
-docker run -d --name audio-splitter-service -p 8081:8081 -v /path/to/shared_storage:/shared_storage audio-splitter
+docker run -d --name audio-splitter-service -v /path/to/shared_storage:/shared_storage -e RABBITMQ_HOST=rabbitmq-host audio-splitter
 ```
 
-### Пути
+### Локальный запуск
 
-Входящие файлы: `/shared_storage`  
-Результаты: `/shared_storage/splitted`
+Установить зависимости:
+```bash
+pip install -r requirements.txt
+```
+
+Запустить сервис (убедитесь, что RabbitMQ запущен на localhost:5672):
+```bash
+python main.py
+```
