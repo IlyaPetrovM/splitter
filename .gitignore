@@ -1,2 +1,10 @@
 storage/*
 *.mp3
+.claude/*
+
+task.txt
+*.md
+__pycache__
+.pytest_cache
+.env
+.venv
