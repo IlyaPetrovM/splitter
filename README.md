@@ -58,14 +58,6 @@ curl -X POST http://localhost:8081/split \
 ```bash
 curl -X POST http://localhost:8081/split \
   -H "Content-Type: application/json" \
-  -d '{"filename": "audio.mp3", "split_parts": 4, "save_to_storage": true}'
-```
-
-или с URL:
-
-```bash
-curl -X POST http://localhost:8081/split \
-  -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/audio.mp3", "split_parts": 4, "save_to_storage": true}'
 ```
 

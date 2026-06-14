@@ -3,9 +3,10 @@ version: '3.8'
 services:
   audio-splitter:
     build: .
-    container_name: audio-splitter-service
+    image: audio-splitter-service:0.0.1
+    container_name: audio-splitter
     ports:
-      - "8081:8081"
+      - "8002:8002"
     volumes:
       - ./shared_storage:/shared_storage
     privileged: true
