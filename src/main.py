@@ -240,6 +240,7 @@ def process_split_request(request_data: dict, channel) -> dict:
             else:
                 return {
                     "success": True,
+                    "task_id": task_id,
                     "files": created_files
                 }
 
@@ -259,7 +260,7 @@ def process_split_request(request_data: dict, channel) -> dict:
     except Exception as e:
         error_msg = str(e)
         print(f"[ERROR] {error_msg}")
-        return {"success": False, "error": error_msg}
+        return {"success": False, "task_id": task_id, "error": error_msg}
 
 
 def on_message_received(channel, method, properties, body):

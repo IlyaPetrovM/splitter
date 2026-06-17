@@ -13,16 +13,6 @@
 
 ### Формат входящего сообщения (split_in)
 
-```json
-{
-  "filename": "audio.mp3",
-  "url": null,
-  "max_duration": 60,
-  "split_parts": null,
-  "save_to_storage": false
-}
-```
-
 **Параметры:**
 - `filename` (string, опционально) - название файла в хранилище
 - `url` (string, опционально) - URL для скачивания файла
@@ -38,64 +28,39 @@
 
 ```json
 {
-  "filename": "audio.mp3",
+  "task_id": "task_uuid",
+  "url": "http://file-storage-service:3001/api/files/audio.mp3",
   "max_duration": 60,
-  "save_to_storage": false
-}
-```
-
-#### с количеством частей
-
-```json
-{
-  "task_id": "task_uuid",
-  "url": "http://file-storage-service:3001/api/files/audio.mp3",
-  "split_parts": 4,
-  "save_to_storage": false
-}
-```
-
-#### По URL с сохранением в хранилище
-
-```json
-{
-  "task_id": "task_uuid",
-  "url": "http://file-storage-service:3001/api/files/audio.mp3",
-  "split_parts": 4,
   "save_to_storage": true
 }
 ```
 
 ### Формат исходящего сообщения (split_out)
 
-#### При успехе (save_to_storage=false)
-
-```json
-{
-  "task_id": "task_uuid",
-  "success": true,
-  "files": [
-    "/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
-    "/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
-  ]
-}
-```
-
 #### При успехе (save_to_storage=true)
 
 ```json
 {
-  "task_id": "task_uuid",
   "success": true,
+  "task_id": "task_uuid",
   "storage_files": [
     {
-      "id": "1777218058633-57656008-audio.mp3__part__0__30.mp3",
-      "originalName": "audio.mp3__part__0__30.mp3",
-      "size": 1024000,
-      "mimeType": "audio/mpeg",
-      "path": "/app/storage/1777218058633-57656008-audio.mp3__part__0__30.mp3",
+      "path": "audio.mp3__part__0__30.mp3",
       "uploadedAt": "2026-05-15T10:30:00.000Z"
     }
+  ]
+}
+```
+
+#### При успехе (save_to_storage=false)
+
+```json
+{
+  "success": true,
+  "task_id": "task_uuid",
+  "files": [
+    "/shared_storage/splitted/audio.mp3/audio.mp3__part__0__30.mp3",
+    "/shared_storage/splitted/audio.mp3/audio.mp3__part__30__60.mp3"
   ]
 }
 ```
@@ -104,8 +69,8 @@
 
 ```json
 {
-  "task_id": "task_uuid",
   "success": false,
+  "task_id": "task_uuid",
   "error": "Error message describing what went wrong"
 }
 ```

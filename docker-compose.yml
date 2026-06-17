@@ -1,7 +1,7 @@
 services:
   audio-splitter:
     build: .
-    image: audio-splitter-service:0.0.1
+    image: audio-splitter-service:0.2.0
     container_name: audio-splitter
     volumes:
       - ./storage/splitter:/shared_storage
