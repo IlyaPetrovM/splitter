@@ -5,7 +5,17 @@ import tempfile
 import requests
 import pika
 import sys
+import logging
 from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - [%(levelname)s] - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 SHARED_STORAGE = "/shared_storage"
 SPLITTED_DIR = os.path.join(SHARED_STORAGE, "splitted")
@@ -19,7 +29,7 @@ os.makedirs(SPLITTED_DIR, exist_ok=True)
 
 
 def get_audio_duration(file_path: str) -> float:
-    print(f"[INFO] Getting duration for: {file_path}")
+    logger.info(f"Getting duration for: {file_path}")
     cmd = [
         "ffprobe",
         "-v", "error",
@@ -35,7 +45,7 @@ def get_audio_duration(file_path: str) -> float:
 
 
 def extract_audio_track(input_file: str, output_file: str) -> None:
-    print(f"[INFO] Extracting audio from video: {input_file}")
+    logger.info(f"Extracting audio from video: {input_file}")
     cmd = [
         "ffmpeg",
         "-i", input_file,
@@ -45,11 +55,11 @@ def extract_audio_track(input_file: str, output_file: str) -> None:
         output_file
     ]
     subprocess.run(cmd, capture_output=True, check=True)
-    print(f"[INFO] Audio extracted to: {output_file}")
+    logger.info(f"Audio extracted to: {output_file}")
 
 
 def download_file(url: str, temp_dir: str) -> str:
-    print(f"[INFO] Downloading file from: {url}")
+    logger.info(f"Downloading file from: {url}")
     try:
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
@@ -62,14 +72,14 @@ def download_file(url: str, temp_dir: str) -> str:
                 if chunk:
                     f.write(chunk)
 
-        print(f"[INFO] File downloaded to: {file_path}")
+        logger.info(f"File downloaded to: {file_path}")
         return file_path
     except Exception as e:
         raise ValueError(f"Failed to download file: {str(e)}")
 
 
 def upload_file_to_storage(file_path: str) -> dict:
-    print(f"[INFO] Uploading file to storage: {file_path}")
+    logger.info(f"Uploading file to storage: {file_path}")
     try:
         with open(file_path, 'rb') as f:
             files = {'file': (os.path.basename(file_path), f)}
@@ -78,7 +88,7 @@ def upload_file_to_storage(file_path: str) -> dict:
 
         result = response.json()
         file_id = result.get('file', {}).get('id')
-        print(f"[INFO] File uploaded to storage with id: {file_id}")
+        logger.info(f"File uploaded to storage with id: {file_id}")
         return result.get('file', {})
     except Exception as e:
         raise ValueError(f"Failed to upload file to storage: {str(e)}")
@@ -92,7 +102,7 @@ def split_audio(input_file: str, output_dir: str, original_filename: str,
         ext = Path(original_filename).suffix
         output_file = os.path.join(output_dir, f"{original_filename}__part__{int(start)}__{int(end)}{ext}")
 
-        print(f"[SPLIT] Cutting segment {i+1}/{len(segments)}: {start}s-{end}s -> {output_file}")
+        logger.info(f"Cutting segment {i+1}/{len(segments)}: {start}s-{end}s -> {output_file}")
 
         cmd = [
             "ffmpeg",
@@ -105,7 +115,6 @@ def split_audio(input_file: str, output_dir: str, original_filename: str,
         ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-        # Get duration of the created segment
         segment_duration = end - start
         duration_msec = int(segment_duration * 1000)
 
@@ -114,7 +123,7 @@ def split_audio(input_file: str, output_dir: str, original_filename: str,
             "duration_msec": duration_msec
         })
 
-    print(f"[SUCCESS] Created {len(created_files)} audio segments")
+    logger.info(f"Created {len(created_files)} audio segments")
     return created_files
 
 
@@ -123,7 +132,7 @@ def calculate_segments(duration: float, max_duration: int | None,
     segments = []
 
     if max_duration:
-        print(f"[INFO] Splitting by max_duration: {max_duration}s")
+        logger.info(f"Splitting by max_duration: {max_duration}s")
         current_start = 0.0
         while current_start < duration:
             current_end = min(current_start + max_duration, duration)
@@ -131,7 +140,7 @@ def calculate_segments(duration: float, max_duration: int | None,
             current_start = current_end
 
     elif split_parts:
-        print(f"[INFO] Splitting into {split_parts} parts")
+        logger.info(f"Splitting into {split_parts} parts")
         segment_duration = duration / split_parts
         for i in range(split_parts):
             start = i * segment_duration
@@ -149,7 +158,7 @@ def process_split_request(request_data: dict, channel) -> dict:
     save_to_storage = request_data.get("save_to_storage", False)
     task_id = request_data.get("task_id")
 
-    print(f"\n[REQUEST] filename={filename}, url={url}, max_duration={max_duration}, split_parts={split_parts}")
+    logger.info(f"Processing request: filename={filename}, url={url}, max_duration={max_duration}, split_parts={split_parts}")
 
     try:
         if not max_duration and not split_parts:
@@ -181,7 +190,7 @@ def process_split_request(request_data: dict, channel) -> dict:
                 raise ValueError(f"File not found: {file_path}")
             original_filename = filename
 
-        print(f"[INFO] File found: {file_path}")
+        logger.info(f"File found: {file_path}")
 
         video_extensions = {".mp4", ".mkv", ".webm"}
         audio_extensions = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
@@ -201,7 +210,7 @@ def process_split_request(request_data: dict, channel) -> dict:
 
             try:
                 duration = get_audio_duration(processing_file)
-                print(f"[INFO] Duration: {duration:.2f}s")
+                logger.info(f"Duration: {duration:.2f}s")
             except Exception as e:
                 raise ValueError(f"Failed to get duration: {str(e)}")
 
@@ -210,13 +219,13 @@ def process_split_request(request_data: dict, channel) -> dict:
             if not segments:
                 raise ValueError("No segments calculated")
 
-            print(f"[INFO] Total segments: {len(segments)}")
+            logger.info(f"Total segments: {len(segments)}")
 
             temp_split_dir_obj = None
             if save_to_storage:
                 temp_split_dir_obj = tempfile.TemporaryDirectory(prefix="splitted_")
                 split_dir = temp_split_dir_obj.name
-                print(f"[INFO] Using temporary directory for split files: {split_dir}")
+                logger.info(f"Using temporary directory for split files: {split_dir}")
             else:
                 split_dir = os.path.join(SPLITTED_DIR, original_filename)
                 os.makedirs(split_dir, exist_ok=True)
@@ -228,7 +237,7 @@ def process_split_request(request_data: dict, channel) -> dict:
 
             storage_files = []
             if save_to_storage:
-                print(f"[INFO] Uploading {len(created_files)} files to storage...")
+                logger.info(f"Uploading {len(created_files)} files to storage...")
                 for file_item in created_files:
                     try:
                         file_path_item = file_item["path"]
@@ -240,10 +249,10 @@ def process_split_request(request_data: dict, channel) -> dict:
                             "duration_msec": duration_msec
                         })
                     except Exception as e:
-                        print(f"[WARNING] Failed to upload {file_path_item}: {str(e)}")
+                        logger.warning(f"Failed to upload {file_path_item}: {str(e)}")
                         raise ValueError(f"Upload to storage failed: {str(e)}")
 
-            print(f"[DONE] Processing completed\n")
+            logger.info(f"Processing completed")
 
             if save_to_storage:
                 result = {"status": "success", "task_id": task_id, "storage_files": storage_files}
@@ -265,30 +274,30 @@ def process_split_request(request_data: dict, channel) -> dict:
         finally:
             if temp_audio and os.path.exists(temp_audio):
                 os.remove(temp_audio)
-                print(f"[INFO] Temp audio removed")
+                logger.debug(f"Temp audio removed")
 
             if temp_dir_obj:
                 temp_dir_obj.cleanup()
-                print(f"[INFO] Input temp directory removed")
+                logger.debug(f"Input temp directory removed")
 
             if temp_split_dir_obj:
                 temp_split_dir_obj.cleanup()
-                print(f"[INFO] Split temp directory removed")
+                logger.debug(f"Split temp directory removed")
 
     except Exception as e:
         error_msg = str(e)
-        print(f"[ERROR] {error_msg}")
+        logger.error(f"{error_msg}")
         return {"status": "error", "task_id": task_id, "error": error_msg}
 
 
 def on_message_received(channel, method, properties, body):
-    print(f"[QUEUE] Received message from {RABBITMQ_QUEUE_IN}")
+    logger.info(f"Received message from {RABBITMQ_QUEUE_IN}")
 
     try:
         request_data = json.loads(body.decode())
-        print(f"[QUEUE] Decoded message: {request_data}")
+        logger.debug(f"Decoded message: {request_data}")
     except Exception as e:
-        print(f"[ERROR] Failed to decode message: {str(e)}")
+        logger.error(f"Failed to decode message: {str(e)}")
         channel.basic_ack(delivery_tag=method.delivery_tag)
         return
 
@@ -301,15 +310,15 @@ def on_message_received(channel, method, properties, body):
             routing_key=RABBITMQ_QUEUE_OUT,
             body=result_message
         )
-        print(f"[QUEUE] Sent result to {RABBITMQ_QUEUE_OUT}")
+        logger.info(f"Sent result to {RABBITMQ_QUEUE_OUT}")
     except Exception as e:
-        print(f"[ERROR] Failed to send result: {str(e)}")
+        logger.error(f"Failed to send result: {str(e)}")
 
     channel.basic_ack(delivery_tag=method.delivery_tag)
 
 
 def start_consumer():
-    print(f"[INIT] Connecting to RabbitMQ at {RABBITMQ_HOST}")
+    logger.info(f"Connecting to RabbitMQ at {RABBITMQ_HOST}")
 
     try:
         credentials = pika.PlainCredentials('guest', 'guest')
@@ -322,7 +331,7 @@ def start_consumer():
             )
         )
     except Exception as e:
-        print(f"[ERROR] Failed to connect to RabbitMQ: {str(e)}")
+        logger.error(f"Failed to connect to RabbitMQ: {str(e)}")
         sys.exit(1)
 
     channel = connection.channel()
@@ -336,13 +345,13 @@ def start_consumer():
         on_message_callback=on_message_received
     )
 
-    print(f"[INIT] Listening on queue: {RABBITMQ_QUEUE_IN}")
-    print(f"[INIT] Results will be sent to queue: {RABBITMQ_QUEUE_OUT}")
+    logger.info(f"Listening on queue: {RABBITMQ_QUEUE_IN}")
+    logger.info(f"Results will be sent to queue: {RABBITMQ_QUEUE_OUT}")
 
     try:
         channel.start_consuming()
     except KeyboardInterrupt:
-        print("[SHUTDOWN] Shutting down...")
+        logger.info("Shutting down...")
         channel.stop_consuming()
         connection.close()
 
