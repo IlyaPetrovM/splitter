@@ -85,7 +85,7 @@ def upload_file_to_storage(file_path: str) -> dict:
 
 
 def split_audio(input_file: str, output_dir: str, original_filename: str,
-                segments: list[tuple[float, float]]) -> list[str]:
+                segments: list[tuple[float, float]]) -> list[dict]:
     created_files = []
 
     for i, (start, end) in enumerate(segments):
@@ -104,7 +104,15 @@ def split_audio(input_file: str, output_dir: str, original_filename: str,
             output_file
         ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        created_files.append(output_file)
+
+        # Get duration of the created segment
+        segment_duration = end - start
+        duration_msec = int(segment_duration * 1000)
+
+        created_files.append({
+            "path": output_file,
+            "duration_msec": duration_msec
+        })
 
     print(f"[SUCCESS] Created {len(created_files)} audio segments")
     return created_files
@@ -221,12 +229,15 @@ def process_split_request(request_data: dict, channel) -> dict:
             storage_files = []
             if save_to_storage:
                 print(f"[INFO] Uploading {len(created_files)} files to storage...")
-                for file_path_item in created_files:
+                for file_item in created_files:
                     try:
+                        file_path_item = file_item["path"]
+                        duration_msec = file_item["duration_msec"]
                         file_info = upload_file_to_storage(file_path_item)
                         storage_files.append({
                             "path": os.path.basename(file_info.get("path", "")),
-                            "uploadedAt": file_info.get("uploadedAt")
+                            "uploadedAt": file_info.get("uploadedAt"),
+                            "duration_msec": duration_msec
                         })
                     except Exception as e:
                         print(f"[WARNING] Failed to upload {file_path_item}: {str(e)}")
@@ -235,13 +246,20 @@ def process_split_request(request_data: dict, channel) -> dict:
             print(f"[DONE] Processing completed\n")
 
             if save_to_storage:
-                result = {"success": True, "task_id": task_id, "storage_files": storage_files}
+                result = {"status": "success", "task_id": task_id, "storage_files": storage_files}
                 return result
             else:
+                files_result = [
+                    {
+                        "path": file_item["path"],
+                        "duration_msec": file_item["duration_msec"]
+                    }
+                    for file_item in created_files
+                ]
                 return {
-                    "success": True,
+                    "status": "success",
                     "task_id": task_id,
-                    "files": created_files
+                    "files": files_result
                 }
 
         finally:
@@ -260,7 +278,7 @@ def process_split_request(request_data: dict, channel) -> dict:
     except Exception as e:
         error_msg = str(e)
         print(f"[ERROR] {error_msg}")
-        return {"success": False, "task_id": task_id, "error": error_msg}
+        return {"status": "error", "task_id": task_id, "error": error_msg}
 
 
 def on_message_received(channel, method, properties, body):

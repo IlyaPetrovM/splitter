@@ -1,8 +1,8 @@
 services:
   audio-splitter:
     build: .
-    image: audio-splitter-service:0.2.0
-    container_name: audio-splitter
+    image: audio-splitter-service:0.3.0
+    container_name: splitter-audio-splitter
     volumes:
       - ./storage/splitter:/shared_storage
     privileged: true
@@ -16,7 +16,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:4.0-management-alpine
-    container_name: rabbitmq-service
+    container_name: splitter-rabbitmq-service
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -30,7 +30,7 @@ services:
       - splitter-network
   file-storage-service:
     image: file-storage-service:0.0.1
-    container_name: file-storage-for-splitter
+    container_name: splitter-file-storage-for-splitter
     ports:
       - "3001:3001"
     volumes:
