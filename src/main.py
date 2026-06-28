@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 SHARED_STORAGE = "/shared_storage"
 SPLITTED_DIR = os.path.join(SHARED_STORAGE, "splitted")
-FILE_STORAGE_API = "http://file-storage-service:3001/api/files"
+FILE_STORAGE_API = os.getenv("FILE_STORAGE_API", "http://file-storage-service:3001/api/files")
 
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_QUEUE_IN = "split_in"

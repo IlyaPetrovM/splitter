@@ -1,7 +1,7 @@
 services:
   audio-splitter:
     build: .
-    image: audio-splitter-service:0.3.1
+    image: audio-splitter-service:0.4.0
     container_name: splitter-audio-splitter
     volumes:
       - ./storage/splitter:/shared_storage
@@ -9,8 +9,10 @@ services:
     restart: unless-stopped
     depends_on:
       - rabbitmq
+      - file-storage-service
     environment:
       RABBITMQ_HOST: rabbitmq
+      FILE_STORAGE_API: http://file-storage-service:3001/api/files
     networks:
       - splitter-network
 

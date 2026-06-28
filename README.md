@@ -83,9 +83,14 @@
 docker-compose up -d
 ```
 
-Это запустит оба сервиса:
-- audio-splitter (подключается к RabbitMQ)
+Это запустит сервисы:
+- audio-splitter (подключается к RabbitMQ и File Storage Service)
 - rabbitmq на портах 5672 (AMQP) и 15672 (Management UI)
+- file-storage-service на порту 3001
+
+**Конфигурация переменных окружения:**
+- `RABBITMQ_HOST` - адрес RabbitMQ (по умолчанию: `rabbitmq`)
+- `FILE_STORAGE_API` - URL File Storage Service API (по умолчанию: `http://file-storage-service:3001/api/files`)
 
 ### Docker
 
@@ -108,5 +113,9 @@ pip install -r requirements.txt
 
 Запустить сервис (убедитесь, что RabbitMQ запущен на localhost:5672):
 ```bash
-python main.py
+# С переменными окружения по умолчанию
+python src/main.py
+
+# Или с кастомными переменными
+RABBITMQ_HOST=your-rabbit-host FILE_STORAGE_API=http://your-file-storage:3001/api/files python src/main.py
 ```
