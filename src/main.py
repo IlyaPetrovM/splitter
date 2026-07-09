@@ -24,6 +24,7 @@ FILE_STORAGE_API = os.getenv("FILE_STORAGE_API", "http://file-storage-service:30
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_QUEUE_IN = "split_in"
 RABBITMQ_QUEUE_OUT = "split_out"
+RABBITMQ_HEARTBEAT = 600
 
 os.makedirs(SPLITTED_DIR, exist_ok=True)
 
@@ -327,7 +328,8 @@ def start_consumer():
                 host=RABBITMQ_HOST,
                 credentials=credentials,
                 connection_attempts=5,
-                retry_delay=2
+                retry_delay=2, 
+                heartbeat=RABBITMQ_HEARTBEAT
             )
         )
     except Exception as e:
