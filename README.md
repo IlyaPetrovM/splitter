@@ -2,6 +2,9 @@
 
 FastAPI микросервис для нарезания аудио файлов на части без переперекодирования.
 
+<img width="986" height="607" alt="image" src="https://github.com/user-attachments/assets/902103e9-20fa-40d6-84a1-ad0bacdfc58b" />
+
+
 ## Поддерживаемые форматы
 
 - Аудио: mp3, wav, m4a, flac, ogg
